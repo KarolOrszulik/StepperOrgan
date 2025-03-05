@@ -28,20 +28,37 @@ bool MidiParser::isStatusByte(byte inByte)
 
 void MidiParser::parseMidiMessage()
 {
+    Serial1.printf("%02X %02X %02X\n", lastStatusByte, dataBytes[0], dataBytes[1]);
+
     constexpr byte NOTE_ON  = 0x90;
     constexpr byte NOTE_OFF = 0x80;
-    constexpr byte ALL_NOTES_OFF = 0xB3;
-    constexpr byte ALL_SOUND_OFF = 0xB0;
+    constexpr byte CONTROL_CHANGE = 0xB0;
 
-    const byte maskedCommand = lastStatusByte & 0xF0;
+    const byte statusType = lastStatusByte & 0xF0;
     const byte channel = (lastStatusByte & 0x0F) + 1;
 
-    if (maskedCommand == NOTE_OFF || (maskedCommand == NOTE_ON && dataBytes[1] == 0))
+    switch (statusType)
+    {
+    case NOTE_ON:
+        if (dataBytes[1] != 0)
+        {
+            notePressedCallback(dataBytes[0], dataBytes[1], channel);
+            break;
+        }
+        // else fall through to NOTE_OFF
+
+    case NOTE_OFF:
         noteReleasedCallback(dataBytes[0], dataBytes[1], channel);
-    else if (maskedCommand == NOTE_ON)
-        notePressedCallback(dataBytes[0], dataBytes[1], channel);
-    else if (lastStatusByte == ALL_NOTES_OFF || lastStatusByte == ALL_SOUND_OFF)
-        allOffCallback();
+        break;
+
+    case CONTROL_CHANGE:
+        if (dataBytes[0] == 123 || dataBytes[0] == 120)
+            allOffCallback();
+        break;
+
+    default:
+        break; // ignore unimplemented MIDI messages
+    }
 
     dataBytesIdx = 0; // to handle running status
 }
